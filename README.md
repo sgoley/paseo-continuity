@@ -40,6 +40,15 @@ configured number of consecutive transitions.
 
 Use `/continuity` or the Command Center action to test or trigger a transition manually.
 
+### Composer pill
+
+The pill shows how much quota the current provider has left (its tightest window, e.g.
+`Codex 23%`). At or below the **Warn when remaining quota drops to** threshold it shows `⚠` and
+suggests compacting and moving. Pressing it opens a chooser of the other providers in your chain,
+each with its own remaining quota. **Compact & move** writes a condensed, redacted handoff to
+`.paseo/continuity/` (self-ignored by git) and starts the chosen provider on it. If you ignore the
+warning, nothing changes: automatic failover still happens when the provider actually fails.
+
 ## How it works
 
 - Watches completed turns in the daemon, independent of the failed provider.

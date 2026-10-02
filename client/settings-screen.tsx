@@ -14,6 +14,8 @@ import {
 } from "../shared/settings";
 import { ChainEditor } from "./chain-editor";
 
+const WARN_OPTIONS = [5, 10, 15, 20, 30, 50].map((pct) => ({ value: String(pct), label: `${pct}% left` }));
+
 const COUNT_OPTIONS = ["1", "2", "3", "4", "5", "8"].map((value) => ({ label: value, value }));
 const BUDGET_OPTIONS = ["20000", "40000", "60000", "100000", "150000", "200000"].map((value) => ({
   label: `${Number(value) / 1000}k chars`,
@@ -93,6 +95,12 @@ export function SettingsScreen({ theme }: PluginSurfaceProps) {
             hint="Display a quick failover button in the chat composer bar."
             value={values.showComposerPill}
             onValueChange={(showComposerPill) => save({ ...values, showComposerPill })}
+          />
+          <SettingsSelect
+            label="Warn when remaining quota drops to"
+            value={String(values.warnAtRemainingPct)}
+            options={WARN_OPTIONS}
+            onValueChange={(value) => save({ ...values, warnAtRemainingPct: Number(value) })}
           />
           <SettingsSwitch
             label="Provider badge in new chat titles"

@@ -1,6 +1,7 @@
 import type { PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { ChainPanel } from "./client/chain-panel";
 import { SettingsScreen } from "./client/settings-screen";
+import { createPillPopover } from "./client/pill-popover";
 import { TransitionCard } from "./client/transition-card";
 import {
   TRANSITION_KIND,
@@ -9,7 +10,9 @@ import {
   failoverNowRpc,
   getSettingsRpc,
 } from "./shared/contracts";
+import { providerBadge } from "./shared/labels";
 import type { ContinuitySettings } from "./shared/settings";
+import { formatPct, isLowQuota, summarizeQuota, type UsageProvider } from "./shared/usage";
 
 export default function contribute(client: PluginClientContext) {
   client.addTimelineRenderer({
@@ -82,24 +85,54 @@ export default function contribute(client: PluginClientContext) {
 
   // Composer pills management
   const pills = new Map<string, PluginButtonRegistration>();
+  const agents = new Map<string, { provider: string }>();
   const lifetime = new AbortController();
+  const PillPopover = createPillPopover(({ workspaceId, agentId }) =>
+    client.openPanel("chain", { workspaceId, agentId }),
+  );
 
   let cachedSettings: ContinuitySettings | null = null;
-  const updatePillVisibility = (settings: ContinuitySettings) => {
-    cachedSettings = settings;
-    const visible = settings.enabled && settings.showComposerPill;
-    for (const pill of pills.values()) {
-      pill.update({ visible });
+  let usage: UsageProvider[] = [];
+
+  const pillPresentation = (provider: string) => {
+    const settings = cachedSettings;
+    const quota = summarizeQuota(usage, provider);
+    const low = settings !== null && isLowQuota(quota, settings.warnAtRemainingPct);
+    const name = providerBadge(provider).label;
+    return {
+      visible: settings ? settings.enabled && settings.showComposerPill : true,
+      label: quota ? `${low ? "⚠ " : ""}${name} ${formatPct(quota.remainingPct)}` : "Continuity",
+    };
+  };
+
+  const refreshPills = () => {
+    for (const [agentId, pill] of pills) {
+      const agent = agents.get(agentId);
+      if (agent) pill.update(pillPresentation(agent.provider));
     }
   };
 
-  const registerPill = (agent: { id: string; workspaceId?: string | null }) => {
+  const pollUsage = () => {
+    client.paseo.providers
+      .listUsage()
+      .then((result) => {
+        usage = result.providers;
+        refreshPills();
+        return undefined;
+      })
+      .catch(() => {});
+  };
+
+  const registerPill = (agent: { id: string; workspaceId?: string | null; provider: string }) => {
     if (lifetime.signal.aborted || !agent.workspaceId) return;
     const agentId = agent.id;
     const workspaceId = agent.workspaceId;
-    pills.get(agentId)?.remove();
-
-    const isVisible = cachedSettings ? cachedSettings.enabled && cachedSettings.showComposerPill : true;
+    agents.set(agentId, { provider: agent.provider });
+    const existing = pills.get(agentId);
+    if (existing) {
+      existing.update(pillPresentation(agent.provider));
+      return;
+    }
 
     pills.set(
       agentId,
@@ -108,18 +141,10 @@ export default function contribute(client: PluginClientContext) {
         workspaceId,
         agentId,
         button: {
-          title: "Continue on next provider",
+          title: "Continue on another provider",
           icon: "ArrowRightLeft",
-          label: "Continuity",
-          visible: isVisible,
-          behavior: {
-            kind: "action",
-            async onPress() {
-              const result = await client.rpc(failoverNowRpc, { agentId });
-              if (result.status !== "created") throw new Error(result.message);
-              client.openPanel("chain", { workspaceId, agentId: result.newAgentId ?? agentId });
-            },
-          },
+          ...pillPresentation(agent.provider),
+          behavior: { kind: "popover", Content: PillPopover },
         },
       }),
     );
@@ -128,14 +153,20 @@ export default function contribute(client: PluginClientContext) {
   const removeAllPills = () => {
     for (const pill of pills.values()) pill.remove();
     pills.clear();
+    agents.clear();
   };
 
   void client
     .rpc(getSettingsRpc, {})
     .then((settings) => {
-      updatePillVisibility(settings);
+      cachedSettings = settings;
+      refreshPills();
+      return undefined;
     })
     .catch(() => {});
+
+  pollUsage();
+  const usageTimer = setInterval(pollUsage, 60_000);
 
   void client.paseo.agents
     .list({ subscribe: {}, signal: lifetime.signal })
@@ -153,6 +184,7 @@ export default function contribute(client: PluginClientContext) {
           } else if ("agentId" in update && typeof update.agentId === "string") {
             pills.get(update.agentId)?.remove();
             pills.delete(update.agentId);
+            agents.delete(update.agentId);
           }
         },
       });
@@ -163,6 +195,7 @@ export default function contribute(client: PluginClientContext) {
     });
 
   return () => {
+    clearInterval(usageTimer);
     lifetime.abort();
     removeAllPills();
   };

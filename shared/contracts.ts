@@ -33,7 +33,13 @@ export type TransitionCard = z.output<typeof TransitionCardSchema>;
 
 export const failoverNowRpc = defineRpc({
   name: "continuity.failover-now",
-  input: z.object({ agentId: z.string().min(1) }),
+  input: z.object({
+    agentId: z.string().min(1),
+    /** Provider to continue on; omitted picks the next ready provider in the chain. */
+    targetProvider: z.string().min(1).optional(),
+    /** "file" writes a compacted handoff file and points the successor at it. */
+    handoff: z.enum(["inline", "file"]).optional(),
+  }),
   output: z.object({
     status: z.enum(["created", "failed", "exhausted", "halted", "skipped"]),
     newAgentId: z.string().nullable(),

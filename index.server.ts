@@ -74,7 +74,7 @@ export default function contribute(server: PluginServerContext) {
     return settings;
   });
 
-  server.handle(failoverNowRpc, async ({ agentId }, { paseo }): Promise<FailoverResult> => {
+  server.handle(failoverNowRpc, async ({ agentId, targetProvider, handoff }, { paseo }): Promise<FailoverResult> => {
     if (settings.chain.length < 2) {
       return { status: "skipped", newAgentId: null, message: "Configure at least two providers in the fallback chain." };
     }
@@ -104,6 +104,8 @@ export default function contribute(server: PluginServerContext) {
         timeline,
         reason: "manual",
         evidence: "",
+        ...(targetProvider ? { targetProvider } : {}),
+        ...(handoff ? { handoff } : {}),
       });
       if (result.status === "created") {
         state.claim(agentId);

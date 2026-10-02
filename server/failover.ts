@@ -10,6 +10,7 @@ import {
 import { LABEL, buildSuccessorTitle, providerIdOf } from "../shared/labels";
 import type { ChainEntry, ContinuitySettings } from "../shared/settings";
 import { checkBreaker, chainPositionFromLabels, nextConsecutive, pickNextEntry } from "./chain";
+import { writeHandoffFile } from "./handoff-file";
 import { buildHandoffPrompt } from "./serialize";
 import type { ContinuityState } from "./state";
 import { userMessages } from "./timeline";
@@ -29,6 +30,9 @@ export interface FailoverRequest {
   reason: FailureClass;
   evidence: string;
   resetAt?: number;
+  /** Continue on this provider even if the chain would pick another or it is cooling down. */
+  targetProvider?: string;
+  handoff?: "inline" | "file";
 }
 
 export type FailoverResult =
@@ -102,7 +106,7 @@ export async function runFailover(
     return { status: "halted", newAgentId: null, message: breaker.reason };
   }
 
-  const target = await resolveTarget(paseo, settings, state, agent);
+  const target = await resolveTarget(paseo, settings, state, agent, request.targetProvider);
   if (!target) {
     state.markChainExhausted(position.chainId);
     const message = "No fallback provider is available (all are cooling down, unavailable, or unconfigured).";
@@ -114,7 +118,7 @@ export async function runFailover(
 
   const budget =
     settings.contextMode === "full" ? settings.budgets.fullChars : settings.budgets.automaticChars;
-  const prompt = buildHandoffPrompt(
+  const handoffText = buildHandoffPrompt(
     request.timeline,
     {
       fromAgentId: agent.id,
@@ -125,6 +129,14 @@ export async function runFailover(
     },
     budget,
   );
+  let prompt = handoffText;
+  if (request.handoff === "file") {
+    try {
+      prompt = await writeHandoffFile(agent.cwd, agent.id, handoffText);
+    } catch (error) {
+      log("could not write handoff file, sending inline", errorText(error));
+    }
+  }
   const title = buildSuccessorTitle({
     provider: target.provider,
     model: target.model,
@@ -182,6 +194,7 @@ async function resolveTarget(
   settings: ContinuitySettings,
   state: ContinuityState,
   agent: FailedAgent,
+  forcedProvider?: string,
 ): Promise<ResolvedTarget | null> {
   const snapshot = await paseo.providers.snapshot({ cwd: agent.cwd }).catch((error: unknown) => {
     log("provider snapshot failed", errorText(error));
@@ -191,10 +204,20 @@ async function resolveTarget(
   const rejected = new Set<string>();
 
   for (;;) {
+    const forcedId = forcedProvider ? providerIdOf(forcedProvider) : null;
     const entry = pickNextEntry({
       currentProvider: agent.provider,
-      chain: settings.chain,
-      isCoolingDown: (provider) => state.isCoolingDown(provider),
+      chain: forcedId
+        ? [
+            settings.chain.find((candidate) => providerIdOf(candidate.provider) === forcedId) ?? {
+              provider: forcedId,
+              model: null,
+              modeId: null,
+              thinkingOptionId: null,
+            },
+          ]
+        : settings.chain,
+      isCoolingDown: (provider) => !forcedId && state.isCoolingDown(provider),
       isAvailable: (provider) => {
         if (rejected.has(provider)) return false;
         const info = entries.get(provider);

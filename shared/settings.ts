@@ -47,6 +47,8 @@ export const ContinuitySettingsSchema = z.object({
   includeSubagents: z.boolean().default(false),
   titleBadges: z.boolean().default(true),
   showComposerPill: z.boolean().default(true),
+  /** The composer pill warns and offers a compacted handoff at or below this remaining quota. */
+  warnAtRemainingPct: z.number().min(1).max(90).default(15),
 });
 
 export type ContinuitySettings = z.output<typeof ContinuitySettingsSchema>;
