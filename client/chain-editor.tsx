@@ -5,6 +5,7 @@ import { usePaseo } from '@getpaseo/plugin/client';
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ChainEntry } from "../shared/settings";
 import { providerBadge } from '../shared/labels';
+import { Dropdown } from './dropdown';
 
 interface ChainEditorProps {
   chain: ChainEntry[];
@@ -77,32 +78,9 @@ export function ChainEditor({ chain, onChainChange, theme }: ChainEditorProps) {
     onChainChange(newChain);
   };
 
-  const handleCycleModel = (index: number, snapshotEntry: any) => {
-    const models = snapshotEntry?.models || [];
-    if (models.length < 2) return;
-    const currentModel = chain[index].model;
-    
-    // Allow 'null' as a default option
-    const options = [null, ...models.map((m: any) => m.id)];
-    const currentIndex = options.indexOf(currentModel);
-    const nextModelId = options[(currentIndex + 1) % options.length];
-    
+  const handlePatch = (index: number, patch: Partial<ChainEntry>) => {
     const newChain = [...chain];
-    newChain[index] = { ...newChain[index], model: nextModelId };
-    onChainChange(newChain);
-  };
-
-  const handleCycleMode = (index: number, snapshotEntry: any) => {
-    const modes = snapshotEntry?.modes || [];
-    if (modes.length < 2) return;
-    const currentMode = chain[index].modeId;
-    
-    const options = [null, ...modes.map((m: any) => m.id)];
-    const currentIndex = options.indexOf(currentMode);
-    const nextModeId = options[(currentIndex + 1) % options.length];
-    
-    const newChain = [...chain];
-    newChain[index] = { ...newChain[index], modeId: nextModeId };
+    newChain[index] = { ...newChain[index]!, ...patch };
     onChainChange(newChain);
   };
 
@@ -146,14 +124,6 @@ export function ChainEditor({ chain, onChainChange, theme }: ChainEditorProps) {
             const models = item.snapshotEntry?.models || [];
             const modes = item.snapshotEntry?.modes || [];
             
-            const currentModelName = item.chainEntry?.model 
-              ? models.find((m: any) => m.id === item.chainEntry?.model)?.label ?? item.chainEntry?.model
-              : 'Default Model';
-              
-            const currentModeName = item.chainEntry?.modeId
-              ? modes.find((m: any) => m.id === item.chainEntry?.modeId)?.label ?? item.chainEntry?.modeId
-              : 'Default Mode';
-
             const badge = providerBadge(item.provider, item.chainEntry?.model);
 
             return (
@@ -187,21 +157,29 @@ export function ChainEditor({ chain, onChainChange, theme }: ChainEditorProps) {
                 {item.inChain && (
                   <View style={styles.actionsContent}>
                     {models.length > 1 && (
-                      <Pressable 
-                        onPress={() => handleCycleModel(item.chainIndex as number, item.snapshotEntry)}
-                        style={[styles.selectorBtn, { backgroundColor: theme.colors.surface2 }]}
-                      >
-                        <Text style={{ color: theme.colors.foreground, fontSize: 12 }}>{currentModelName}</Text>
-                      </Pressable>
+                      <Dropdown
+                        theme={theme}
+                        fallbackLabel="Default model"
+                        value={item.chainEntry?.model ?? null}
+                        options={[
+                          { value: null, label: "Default model" },
+                          ...models.map((m: any) => ({ value: m.id as string, label: (m.label ?? m.id) as string })),
+                        ]}
+                        onChange={(model) => handlePatch(item.chainIndex as number, { model })}
+                      />
                     )}
 
                     {modes.length > 1 && (
-                      <Pressable 
-                        onPress={() => handleCycleMode(item.chainIndex as number, item.snapshotEntry)}
-                        style={[styles.selectorBtn, { backgroundColor: theme.colors.surface2 }]}
-                      >
-                        <Text style={{ color: theme.colors.foreground, fontSize: 12 }}>{currentModeName}</Text>
-                      </Pressable>
+                      <Dropdown
+                        theme={theme}
+                        fallbackLabel="Default mode"
+                        value={item.chainEntry?.modeId ?? null}
+                        options={[
+                          { value: null, label: "Default mode" },
+                          ...modes.map((m: any) => ({ value: m.id as string, label: (m.label ?? m.id) as string })),
+                        ]}
+                        onChange={(modeId) => handlePatch(item.chainIndex as number, { modeId })}
+                      />
                     )}
 
                     <View style={styles.orderControls}>
@@ -274,7 +252,8 @@ const styles = StyleSheet.create({
   },
   actionsContent: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: 8,
     paddingLeft: 44, // Align with text past the switch

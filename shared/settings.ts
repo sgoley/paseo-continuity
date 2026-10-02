@@ -36,6 +36,16 @@ export const ContinuitySettingsSchema = z.object({
       fullChars: z.number().int().min(4_000).max(400_000).default(200_000),
     })
     .default({ automaticChars: 60_000, fullChars: 200_000 }),
+  /** Optionally condenses the transcript with a separate (cheap or local) model before handoff. */
+  summary: z
+    .object({
+      enabled: z.boolean().default(false),
+      provider: z.string().min(1).nullable().default(null),
+      model: z.string().min(1).nullable().default(null),
+      inputChars: z.number().int().min(4_000).max(400_000).default(30_000),
+      timeoutSeconds: z.number().int().min(10).max(900).default(180),
+    })
+    .default({ enabled: false, provider: null, model: null, inputChars: 30_000, timeoutSeconds: 180 }),
   maxSwitchesPerChain: z.number().int().min(1).max(20).default(3),
   maxConsecutiveFailovers: z.number().int().min(1).max(20).default(2),
   cooldownMinutes: z

@@ -10,6 +10,7 @@ import {
 import { LABEL, buildSuccessorTitle, providerIdOf } from "../shared/labels";
 import type { ChainEntry, ContinuitySettings } from "../shared/settings";
 import { checkBreaker, chainPositionFromLabels, nextConsecutive, pickNextEntry } from "./chain";
+import { summarizeTimeline } from "./summarize";
 import { writeHandoffFile } from "./handoff-file";
 import { buildHandoffPrompt } from "./serialize";
 import type { ContinuityState } from "./state";
@@ -46,6 +47,8 @@ interface ResolvedTarget {
   modeId: string | undefined;
   thinkingOptionId: string | undefined;
 }
+
+const TAIL_BUDGET_WITH_SUMMARY = 15_000;
 
 const log = (...args: unknown[]) => console.log("[continuity]", ...args);
 
@@ -118,17 +121,23 @@ export async function runFailover(
 
   const budget =
     settings.contextMode === "full" ? settings.budgets.fullChars : settings.budgets.automaticChars;
-  const handoffText = buildHandoffPrompt(
+  const meta = {
+    fromAgentId: agent.id,
+    fromProvider: refreshed?.agent.model ? `${fromProvider}/${refreshed.agent.model}` : fromProvider,
+    cwd: agent.cwd,
+    reason,
+    evidence: request.evidence,
+  };
+  const summary = await summarizeTimeline(paseo, settings, agent, request.timeline, meta);
+  // With a summary, keep only a short verbatim tail as ground truth next to it.
+  const handoffBody = buildHandoffPrompt(
     request.timeline,
-    {
-      fromAgentId: agent.id,
-      fromProvider: refreshed?.agent.model ? `${fromProvider}/${refreshed.agent.model}` : fromProvider,
-      cwd: agent.cwd,
-      reason,
-      evidence: request.evidence,
-    },
-    budget,
+    meta,
+    summary ? Math.min(budget, TAIL_BUDGET_WITH_SUMMARY) : budget,
   );
+  const handoffText = summary
+    ? `## Summary of the work so far (written by ${summary.by})\n\n${summary.text}\n\n${handoffBody}`
+    : handoffBody;
   let prompt = handoffText;
   if (request.handoff === "file") {
     try {

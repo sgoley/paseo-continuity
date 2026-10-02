@@ -13,6 +13,7 @@ import {
   continuitySettings,
 } from "../shared/settings";
 import { ChainEditor } from "./chain-editor";
+import { SummarySettings } from "./summary-settings";
 
 const WARN_OPTIONS = [5, 10, 15, 20, 30, 50].map((pct) => ({ value: String(pct), label: `${pct}% left` }));
 
@@ -130,6 +131,7 @@ export function SettingsScreen({ theme }: PluginSurfaceProps) {
               save({ ...values, budgets: { ...values.budgets, automaticChars: Number(value) } })
             }
           />
+          <SummarySettings values={values} save={save} theme={theme} />
         </SettingsCard>
       </SettingsSection>
 

@@ -46,7 +46,10 @@ The pill shows how much quota the current provider has left (its tightest window
 `Codex 23%`). At or below the **Warn when remaining quota drops to** threshold it shows `⚠` and
 suggests compacting and moving. Pressing it opens a chooser of the other providers in your chain,
 each with its own remaining quota. **Compact & move** writes a condensed, redacted handoff to
-`.paseo/continuity/` (self-ignored by git) and starts the chosen provider on it. If you ignore the
+`.paseo/continuity/` (self-ignored by git) and starts the chosen provider on it. Turn on **Use LLM summary**
+in settings to have a separate provider/model (for example a cheap or local one) write a summary
+that is placed in front of a short verbatim tail; if it fails or times out, the plain transcript
+is used. If you ignore the
 warning, nothing changes: automatic failover still happens when the provider actually fails.
 
 ## How it works
