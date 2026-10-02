@@ -37,7 +37,9 @@ export function checkBreaker(input: {
   position: ChainPosition;
   /** Whether the failed agent did useful work after its own handoff prompt. */
   madeProgress: boolean;
-  settings: Pick<ContinuitySettings, "maxSwitchesPerChain" | "maxConsecutiveFailovers">;
+  settings: Pick<ContinuitySettings, "maxSwitchesPerChain" | "maxConsecutiveFailovers"> & {
+    chainLength?: number;
+  };
   recentFailovers: number;
 }): BreakerVerdict {
   const { position, madeProgress, settings, recentFailovers } = input;
@@ -48,10 +50,14 @@ export function checkBreaker(input: {
     };
   }
   const consecutive = madeProgress ? 0 : position.consecutive;
-  if (consecutive >= settings.maxConsecutiveFailovers) {
+  const consecutiveLimit =
+    settings.chainLength !== undefined && settings.chainLength > 0
+      ? Math.min(settings.maxConsecutiveFailovers, settings.chainLength)
+      : settings.maxConsecutiveFailovers;
+  if (consecutive >= consecutiveLimit) {
     return {
       ok: false,
-      reason: `${consecutive} consecutive failovers without progress (limit ${settings.maxConsecutiveFailovers}).`,
+      reason: `${consecutive} consecutive failovers without progress (limit ${consecutiveLimit}).`,
     };
   }
   if (recentFailovers >= GLOBAL_MAX_FAILOVERS) {

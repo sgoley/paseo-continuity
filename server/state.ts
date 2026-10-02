@@ -7,8 +7,11 @@ import { GLOBAL_WINDOW_MS } from "./chain";
  */
 export class ContinuityState {
   private readonly handled = new Set<string>();
+  private readonly inFlight = new Set<string>();
   private readonly cooldowns = new Map<string, number>();
   private failoverTimes: number[] = [];
+  /** Chains where all providers are cooling down or unavailable. */
+  private readonly exhaustedChains = new Set<string>();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -27,6 +30,23 @@ export class ContinuityState {
 
   isHandled(agentId: string): boolean {
     return this.handled.has(agentId);
+  }
+
+  /** Marks an agent as having started an active failover attempt. */
+  startInFlight(agentId: string): boolean {
+    if (this.inFlight.has(agentId)) {
+      return false;
+    }
+    this.inFlight.add(agentId);
+    return true;
+  }
+
+  finishInFlight(agentId: string): void {
+    this.inFlight.delete(agentId);
+  }
+
+  isInFlight(agentId: string): boolean {
+    return this.inFlight.has(agentId);
   }
 
   coolDown(provider: string, until: number): void {
@@ -48,4 +68,23 @@ export class ContinuityState {
     this.failoverTimes = this.failoverTimes.filter((time) => time > cutoff);
     return this.failoverTimes.length;
   }
+
+  /** Mark a chain as exhausted so auto-failover stops retrying it. */
+  markChainExhausted(chainId: string): void {
+    this.exhaustedChains.add(chainId);
+  }
+
+  isChainExhausted(chainId: string): boolean {
+    return this.exhaustedChains.has(chainId);
+  }
+
+  /** Clear exhausted state and handled set — called when settings change. */
+  clearExhaustedChains(): void {
+    this.exhaustedChains.clear();
+  }
+
+  clearHandled(): void {
+    this.handled.clear();
+  }
 }
+

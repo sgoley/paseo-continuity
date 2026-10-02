@@ -75,19 +75,36 @@ export async function runFailover(
   const isSuccessor = Boolean(labels[LABEL.chainId]);
   const madeProgress = !isSuccessor || userMessages(request.timeline).length > 1;
 
+  // Manual attempts clear the exhausted state so the user can retry after changing settings.
+  if (reason === "manual") {
+    state.clearExhaustedChains();
+  } else if (state.isChainExhausted(position.chainId)) {
+    log("chain already exhausted, skipping auto-failover", position.chainId);
+    return {
+      status: "exhausted",
+      newAgentId: null,
+      message: "All providers in the chain have been tried. Add a new provider to your Fallback chain and use /continuity or the composer pill to retry.",
+    };
+  }
+
   const breaker = checkBreaker({
     position,
     madeProgress,
-    settings,
+    settings: {
+      ...settings,
+      chainLength: settings.chain.length,
+    },
     recentFailovers: state.recentFailovers(),
   });
   if (!breaker.ok) {
+    state.markChainExhausted(position.chainId);
     await card({ status: "halted", detail: breaker.reason });
     return { status: "halted", newAgentId: null, message: breaker.reason };
   }
 
   const target = await resolveTarget(paseo, settings, state, agent);
   if (!target) {
+    state.markChainExhausted(position.chainId);
     const message = "No fallback provider is available (all are cooling down, unavailable, or unconfigured).";
     await card({ status: "exhausted", detail: message });
     return { status: "exhausted", newAgentId: null, message };

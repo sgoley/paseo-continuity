@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSuccessorTitle, stripBadgePrefix } from "../shared/labels";
+import { buildSuccessorTitle, providerIdOf, stripBadgePrefix } from "../shared/labels";
 import { parseChain } from "../shared/chain-format";
 import { checkBreaker, chainPositionFromLabels, nextConsecutive, pickNextEntry } from "./chain";
 import { ContinuityState } from "./state";
@@ -49,6 +49,11 @@ describe("circuit breaker", () => {
   it("halts at the host-wide rate limit", () => {
     expect(checkBreaker({ position: position(0, 0), madeProgress: true, settings, recentFailovers: 5 }).ok).toBe(false);
   });
+  it("caps consecutive limit by chainLength", () => {
+    const customSettings = { maxSwitchesPerChain: 5, maxConsecutiveFailovers: 4, chainLength: 2 };
+    expect(checkBreaker({ position: position(1, 1), madeProgress: false, settings: customSettings, recentFailovers: 0 }).ok).toBe(true);
+    expect(checkBreaker({ position: position(2, 2), madeProgress: false, settings: customSettings, recentFailovers: 0 }).ok).toBe(false);
+  });
   it("reads chain position from labels", () => {
     expect(chainPositionFromLabels("a1", {})).toEqual({ chainId: "a1", sequence: 0, consecutive: 0 });
     expect(
@@ -72,6 +77,32 @@ describe("ContinuityState", () => {
     now += 11 * 60_000;
     expect(state.recentFailovers()).toBe(0);
   });
+
+  it("handles inFlight concurrency lock correctly", () => {
+    const state = new ContinuityState();
+    expect(state.isInFlight("agent-1")).toBe(false);
+    expect(state.startInFlight("agent-1")).toBe(true);
+    expect(state.isInFlight("agent-1")).toBe(true);
+    expect(state.startInFlight("agent-1")).toBe(false);
+    state.finishInFlight("agent-1");
+    expect(state.isInFlight("agent-1")).toBe(false);
+    expect(state.startInFlight("agent-1")).toBe(true);
+  });
+
+  it("tracks and clears exhausted chains and handled agents", () => {
+    const state = new ContinuityState();
+    expect(state.isChainExhausted("chain-1")).toBe(false);
+    state.markChainExhausted("chain-1");
+    expect(state.isChainExhausted("chain-1")).toBe(true);
+    state.clearExhaustedChains();
+    expect(state.isChainExhausted("chain-1")).toBe(false);
+
+    expect(state.claim("agent-x")).toBe(true);
+    expect(state.isHandled("agent-x")).toBe(true);
+    state.clearHandled();
+    expect(state.isHandled("agent-x")).toBe(false);
+    expect(state.claim("agent-x")).toBe(true);
+  });
 });
 
 describe("titles", () => {
@@ -89,6 +120,11 @@ describe("titles", () => {
   });
   it("falls back to the first user message when there is no title", () => {
     expect(buildSuccessorTitle({ provider: "claude", previousTitle: null, fallbackText: "fix   the login bug", badges: false })).toBe("fix the login bug");
+  });
+  it("normalizes provider IDs with lowercasing and trimming", () => {
+    expect(providerIdOf("Claude/sonnet")).toBe("claude");
+    expect(providerIdOf("  OpenCode  ")).toBe("opencode");
+    expect(providerIdOf("codex")).toBe("codex");
   });
 });
 

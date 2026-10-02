@@ -1,5 +1,5 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { failoverNowRpc } from "./shared/contracts";
+import { failoverNowRpc, getSettingsRpc } from "./shared/contracts";
 import { DEFAULT_SETTINGS, continuitySettings, type ContinuitySettings } from "./shared/settings";
 import { classifyTurn } from "./server/classify";
 import { errorText, loadTimeline, runFailover, type FailoverResult } from "./server/failover";
@@ -21,6 +21,8 @@ export default function contribute(server: PluginServerContext) {
   const unsubscribe = settingsHandle.subscribe((next) => {
     if (next.status === "ready") {
       settings = next.values;
+      state.clearExhaustedChains();
+      state.clearHandled();
     }
   });
 
@@ -28,11 +30,11 @@ export default function contribute(server: PluginServerContext) {
     if (stopped || !settings.enabled || settings.chain.length < 2) return;
     if (event.outcome.kind === "canceled") return;
     if (event.agent.parentAgentId !== null && !settings.includeSubagents) return;
-    if (state.isHandled(event.agent.id)) return;
+    if (state.isHandled(event.agent.id) || state.isInFlight(event.agent.id)) return;
 
     const classification = classifyTurn(event.outcome, event.timeline, settings.triggers);
     if (!classification) return;
-    if (!state.claim(event.agent.id)) return;
+    if (!state.startInFlight(event.agent.id)) return;
 
     console.log("[continuity] failover triggered", {
       agentId: event.agent.id,
@@ -49,23 +51,43 @@ export default function contribute(server: PluginServerContext) {
       reason: classification.class,
       evidence: classification.evidence,
       ...(classification.resetAt === undefined ? {} : { resetAt: classification.resetAt }),
-    }).catch((error: unknown) => {
-      console.error("[continuity] failover crashed", event.agent.id, errorText(error));
-    });
+    })
+      .then((result) => {
+        if (result.status === "created") {
+          state.claim(event.agent.id);
+        } else {
+          // If failover did not create a successor (exhausted, halted, failed),
+          // release so the user can retry once they configure new providers.
+          state.release(event.agent.id);
+        }
+      })
+      .catch((error: unknown) => {
+        state.release(event.agent.id);
+        console.error("[continuity] failover crashed", event.agent.id, errorText(error));
+      })
+      .finally(() => {
+        state.finishInFlight(event.agent.id);
+      });
+  });
+
+  server.handle(getSettingsRpc, async (): Promise<ContinuitySettings> => {
+    return settings;
   });
 
   server.handle(failoverNowRpc, async ({ agentId }, { paseo }): Promise<FailoverResult> => {
     if (settings.chain.length < 2) {
       return { status: "skipped", newAgentId: null, message: "Configure at least two providers in the fallback chain." };
     }
-    if (!state.claim(agentId)) {
-      return { status: "skipped", newAgentId: null, message: "This agent already has a Continuity successor." };
+    if (state.isInFlight(agentId)) {
+      return { status: "skipped", newAgentId: null, message: "Failover is already in progress for this agent." };
+    }
+    if (!state.startInFlight(agentId)) {
+      return { status: "skipped", newAgentId: null, message: "Failover is already in progress for this agent." };
     }
     try {
       const handle = paseo.agents.ref(agentId);
       const refreshed = await handle.refresh();
       if (!refreshed) {
-        state.release(agentId);
         return { status: "failed", newAgentId: null, message: `Agent ${agentId} was not found.` };
       }
       const timeline = await loadTimeline(paseo, agentId);
@@ -83,12 +105,17 @@ export default function contribute(server: PluginServerContext) {
         reason: "manual",
         evidence: "",
       });
-      // A manual attempt that did not create a successor may be retried by the user.
-      if (result.status !== "created") state.release(agentId);
+      if (result.status === "created") {
+        state.claim(agentId);
+      } else {
+        state.release(agentId);
+      }
       return result;
     } catch (error) {
       state.release(agentId);
       return { status: "failed", newAgentId: null, message: errorText(error) };
+    } finally {
+      state.finishInFlight(agentId);
     }
   });
 

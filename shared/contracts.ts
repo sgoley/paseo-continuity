@@ -1,5 +1,6 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
+import { ContinuitySettingsSchema } from "./settings";
 
 export const TRANSITION_KIND = "transition";
 export const TRANSITION_VERSION = 1;
@@ -39,3 +40,10 @@ export const failoverNowRpc = defineRpc({
     message: z.string(),
   }),
 });
+
+export const getSettingsRpc = defineRpc({
+  name: "continuity.get-settings",
+  input: z.object({}),
+  output: ContinuitySettingsSchema,
+});
+

@@ -25,7 +25,8 @@ const ALL_BADGES = ["●", "◆", "✦", "▲", "π", "☿", "◎", "•"];
 /** Provider IDs arrive as "provider" or "provider/model"; take the provider part. */
 export function providerIdOf(provider: string): string {
   const slash = provider.indexOf("/");
-  return slash === -1 ? provider : provider.slice(0, slash);
+  const id = slash === -1 ? provider : provider.slice(0, slash);
+  return id.trim().toLowerCase();
 }
 
 export function providerBadge(provider: string, model?: string | null) {

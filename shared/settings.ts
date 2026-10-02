@@ -46,6 +46,7 @@ export const ContinuitySettingsSchema = z.object({
     .default({ quota: 60, rateLimit: 5 }),
   includeSubagents: z.boolean().default(false),
   titleBadges: z.boolean().default(true),
+  showComposerPill: z.boolean().default(true),
 });
 
 export type ContinuitySettings = z.output<typeof ContinuitySettingsSchema>;

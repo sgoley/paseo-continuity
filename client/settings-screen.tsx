@@ -2,18 +2,17 @@ import { type PluginSurfaceProps, useSettings } from "@getpaseo/plugin/client";
 import {
   SettingsAction,
   SettingsCard,
-  SettingsInput,
   SettingsSection,
   SettingsSelect,
   SettingsSwitch,
 } from "@getpaseo/plugin/client/ui";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 import {
   type ContinuitySettings,
   continuitySettings,
 } from "../shared/settings";
-import { formatChain, parseChain } from "../shared/chain-format";
+import { ChainEditor } from "./chain-editor";
 
 const COUNT_OPTIONS = ["1", "2", "3", "4", "5", "8"].map((value) => ({ label: value, value }));
 const BUDGET_OPTIONS = ["20000", "40000", "60000", "100000", "150000", "200000"].map((value) => ({
@@ -23,8 +22,6 @@ const BUDGET_OPTIONS = ["20000", "40000", "60000", "100000", "150000", "200000"]
 
 export function SettingsScreen({ theme }: PluginSurfaceProps) {
   const settings = useSettings(continuitySettings);
-  const [chainDraft, setChainDraft] = useState<string | null>(null);
-  const [chainError, setChainError] = useState<string | null>(null);
   const muted = useMemo(() => ({ color: theme.colors.foregroundMuted, fontSize: 13 }), [theme]);
 
   if (settings.status === "loading") {
@@ -77,32 +74,25 @@ export function SettingsScreen({ theme }: PluginSurfaceProps) {
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="Fallback chain">
+      <SettingsSection
+        title="Fallback chain"
+        info={
+          <Text style={muted}>
+            Select and order providers to use when the active provider runs out of quota or hits rate limits.
+          </Text>
+        }
+      >
         <SettingsCard>
-          <SettingsInput
-            label="Providers in order"
-            hint="provider[/model][:mode], comma-separated. Example: codex:auto, claude:default, opencode/google/gemini-2.5-pro:build"
-            error={chainError}
-            initialValue={formatChain(values.chain)}
-            onChangeText={(text) => {
-              setChainDraft(text);
-              setChainError(null);
-            }}
+          <ChainEditor
+            chain={values.chain}
+            onChainChange={(chain) => save({ ...values, chain })}
+            theme={theme}
           />
-          <SettingsAction
-            label="Save chain"
-            actionLabel="Save"
-            disabled={chainDraft === null}
-            onPress={() => {
-              if (chainDraft === null) return;
-              const parsed = parseChain(chainDraft);
-              if (typeof parsed === "string") {
-                setChainError(parsed);
-                return;
-              }
-              save({ ...values, chain: parsed });
-              setChainDraft(null);
-            }}
+          <SettingsSwitch
+            label="Show Continuity pill in composer"
+            hint="Display a quick failover button in the chat composer bar."
+            value={values.showComposerPill}
+            onValueChange={(showComposerPill) => save({ ...values, showComposerPill })}
           />
           <SettingsSwitch
             label="Provider badge in new chat titles"
