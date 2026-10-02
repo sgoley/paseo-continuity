@@ -1,6 +1,6 @@
 {
   "name": "paseo-continuity",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Automatically continue Paseo agent work on a fallback provider after quota or rate-limit failures",
   "license": "MIT",
   "author": "Chechulin Serhii",
