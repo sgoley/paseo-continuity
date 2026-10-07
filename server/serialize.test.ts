@@ -1,4 +1,4 @@
-import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
+import type { AgentTimelineItem } from "./protocol-types";
 import { describe, expect, it } from "vitest";
 import { buildHandoffPrompt, redact } from "./serialize";
 

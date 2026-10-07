@@ -1,4 +1,4 @@
-import type { AgentTimelineItem, ToolCallDetail } from "@getpaseo/protocol/agent-types";
+import type { AgentTimelineItem, ToolCallDetail } from "./protocol-types";
 import type { FailureClass } from "../shared/contracts";
 import { userMessages } from "./timeline";
 

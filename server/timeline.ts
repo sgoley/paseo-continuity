@@ -1,4 +1,4 @@
-import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
+import type { AgentTimelineItem } from "./protocol-types";
 
 /** Items after the last user message: the latest turn's output. */
 export function latestTurnItems(timeline: readonly AgentTimelineItem[]): readonly AgentTimelineItem[] {
