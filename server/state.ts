@@ -1,4 +1,3 @@
-import { providerIdOf } from "../shared/labels";
 import { GLOBAL_WINDOW_MS } from "./chain";
 
 /**
@@ -49,13 +48,13 @@ export class ContinuityState {
     return this.inFlight.has(agentId);
   }
 
-  coolDown(provider: string, until: number): void {
-    const id = providerIdOf(provider);
+  coolDown(key: string, until: number): void {
+    const id = key.trim().toLowerCase();
     this.cooldowns.set(id, Math.max(until, this.cooldowns.get(id) ?? 0));
   }
 
-  isCoolingDown(provider: string): boolean {
-    const until = this.cooldowns.get(providerIdOf(provider));
+  isCoolingDown(key: string): boolean {
+    const until = this.cooldowns.get(key.trim().toLowerCase());
     return until !== undefined && until > this.now();
   }
 

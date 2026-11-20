@@ -28,6 +28,24 @@ describe("pickNextEntry", () => {
   it("never picks the current provider", () => {
     expect(pickNextEntry({ currentProvider: "codex", chain: [entry("codex")], isCoolingDown: never, isAvailable: always })).toBeNull();
   });
+  it("picks the same provider with a different model, but never the same model", () => {
+    const modeled = [
+      { provider: "omp", model: "devin/swe-2", modeId: null, thinkingOptionId: null },
+      { provider: "omp", model: "openai-codex/gpt-6-luna", modeId: null, thinkingOptionId: null },
+      entry("codex"),
+    ];
+    expect(
+      pickNextEntry({ currentProvider: "omp/devin/swe-2", chain: modeled, isCoolingDown: never, isAvailable: always })?.model,
+    ).toBe("openai-codex/gpt-6-luna");
+    expect(
+      pickNextEntry({ currentProvider: "omp/devin/swe-2", chain: [modeled[0]!], isCoolingDown: never, isAvailable: always }),
+    ).toBeNull();
+  });
+  it("does not pick a model-less entry for the current provider", () => {
+    expect(
+      pickNextEntry({ currentProvider: "codex/gpt-6", chain: [entry("codex"), entry("claude")], isCoolingDown: never, isAvailable: always })?.provider,
+    ).toBe("claude");
+  });
 });
 
 describe("circuit breaker", () => {
@@ -69,9 +87,10 @@ describe("ContinuityState", () => {
     expect(state.claim("a")).toBe(true);
     expect(state.claim("a")).toBe(false);
     state.coolDown("claude/sonnet", now + 60_000);
-    expect(state.isCoolingDown("claude")).toBe(true);
+    expect(state.isCoolingDown("claude/sonnet")).toBe(true);
+    expect(state.isCoolingDown("claude/opus")).toBe(false);
     now += 61_000;
-    expect(state.isCoolingDown("claude")).toBe(false);
+    expect(state.isCoolingDown("claude/sonnet")).toBe(false);
     state.recordFailover();
     expect(state.recentFailovers()).toBe(1);
     now += 11 * 60_000;

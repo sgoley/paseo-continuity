@@ -74,27 +74,45 @@ export function nextConsecutive(position: ChainPosition, madeProgress: boolean):
 }
 
 /**
+ * Identity of a chain entry for failover: provider/model when a model is set,
+ * provider alone otherwise. Lets one provider appear several times with
+ * different models (e.g. omp fronting several backends).
+ */
+export function entryKey(provider: string, model?: string | null): string {
+  const id = providerIdOf(provider);
+  return model ? `${id}/${model}`.toLowerCase() : id;
+}
+
+/**
  * Picks the first eligible chain entry after the current provider, wrapping around.
- * The current provider itself is never picked.
+ * The current provider+model itself is never picked; the same provider with a
+ * different model is allowed.
+ * isCoolingDown receives the composite entry key; isAvailable the provider id.
  */
 export function pickNextEntry(input: {
   currentProvider: string;
   chain: readonly ChainEntry[];
-  isCoolingDown: (provider: string) => boolean;
+  isCoolingDown: (key: string) => boolean;
   isAvailable: (provider: string) => boolean;
 }): ChainEntry | null {
-  const current = providerIdOf(input.currentProvider);
+  const current = input.currentProvider.trim().toLowerCase();
+  const currentProviderId = providerIdOf(current);
   const { chain } = input;
   if (chain.length === 0) {
     return null;
   }
-  const position = chain.findIndex((entry) => providerIdOf(entry.provider) === current);
+  const position = chain.findIndex(
+    (entry) =>
+      entryKey(entry.provider, entry.model) === current ||
+      (!entry.model && providerIdOf(entry.provider) === currentProviderId),
+  );
   const start = position === -1 ? 0 : position + 1;
   for (let offset = 0; offset < chain.length; offset += 1) {
     const entry = chain[(start + offset) % chain.length]!;
     const provider = providerIdOf(entry.provider);
-    if (provider === current) continue;
-    if (input.isCoolingDown(provider)) continue;
+    if (provider === currentProviderId && (!entry.model || entryKey(entry.provider, entry.model) === current))
+      continue;
+    if (input.isCoolingDown(entryKey(entry.provider, entry.model))) continue;
     if (!input.isAvailable(provider)) continue;
     return entry;
   }

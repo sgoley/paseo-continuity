@@ -68,7 +68,7 @@ export async function runFailover(
   if (reason !== "manual") {
     const minutes =
       reason === "quota" ? settings.cooldownMinutes.quota : settings.cooldownMinutes.rateLimit;
-    state.coolDown(fromProvider, request.resetAt ?? Date.now() + minutes * 60_000);
+    state.coolDown(agent.provider, request.resetAt ?? Date.now() + minutes * 60_000);
   }
 
   const oldHandle = paseo.agents.ref(agent.id);
